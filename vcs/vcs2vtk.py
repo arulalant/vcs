@@ -14,6 +14,25 @@ from vcsvtk import fillareautils
 import sys
 import numbers
 
+_DEBUG_VTK = True
+
+def debugWriteGrid(grid, name):
+    if (_DEBUG_VTK):
+        writer = vtk.vtkXMLDataSetWriter()
+        gridType = grid.GetDataObjectType()
+        if (gridType == vtk.VTK_STRUCTURED_GRID):
+            ext = ".vts"
+        elif (gridType == vtk.VTK_UNSTRUCTURED_GRID):
+            ext = ".vtu"
+        elif (gridType == vtk.VTK_POLY_DATA):
+            ext = ".vtp"
+        else:
+            print "Unknown grid type: %d" % gridType
+            ext = ".vtk"
+        writer.SetFileName(name + ext)
+        writer.SetInputData(grid)
+        writer.Write()
+
 f = open(os.path.join(vcs.prefix, "share", "vcs", "wmo_symbols.json"))
 wmo = json.load(f)
 
@@ -267,6 +286,8 @@ def removeHiddenPoints(grid):
                     if (vectorNorm < minVectorNorm):
                         minVector = vector
                         minVectorNorm = vectorNorm
+    hiddenScalars = False
+    hiddenVectors = False
     for i in range(pts.GetNumberOfPoints()):
         if (ghost.GetValue(i) & vtk.vtkDataSetAttributes.HIDDENPOINT):
             cells = vtk.vtkIdList()
@@ -277,9 +298,16 @@ def removeHiddenPoints(grid):
             # hidden points are not removed. This causes problems
             # because it changes the scalar range.
             if(scalars):
+                hiddenScalars = True
                 scalars.SetValue(i, minScalar)
             if(vectors):
+                hiddenVectors = True
                 vectors.SetTypedTuple(i, minVector)
+    # SetValue does not call modified - we'll have to call it after all calls.
+    if (hiddenScalars):
+        scalars.Modified()
+    if (hiddenVectors):
+        vectors.Modified()
     # ensure that GLOBALIDS are copied
     attributes = grid.GetCellData()
     attributes.SetActiveAttribute(-1, attributes.GLOBALIDS)
@@ -547,6 +575,7 @@ def genGrid(data1, data2, gm, deep=True, grid=None, geo=None, genVectors=False,
     globalIds = numpy_to_vtk_wrapper(numpy.arange(0, vg.GetNumberOfCells()), deep=True)
     globalIds.SetName('GlobalIds')
     vg.GetCellData().SetGlobalIds(globalIds)
+    debugWriteGrid(vg, "data")
     out = {"vtk_backend_grid": vg,
            "xm": xm,
            "xM": xM,
